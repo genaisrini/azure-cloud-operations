@@ -1,0 +1,24 @@
+name: Restart Azure VM
+
+on:
+  repository_dispatch:
+    types: [restart-vm]
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Restart VM
+        run: |
+          az vm restart \
+            --resource-group "${{ github.event.client_payload.resourceGroup }}" \
+            --name "${{ github.event.client_payload.vmName }}"
