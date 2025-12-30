@@ -1,0 +1,48 @@
+name: Stop Azure VM
+
+on:
+  repository_dispatch:
+    types: [stop-vm]
+
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          auth-type: SERVICE_PRINCIPAL
+
+      - name: Show Inputs
+        run: |
+          echo "Resource Group: ${{ github.event.client_payload.resourceGroup }}"
+          echo "VM Name: ${{ github.event.client_payload.vmName }}"
+
+      - name: Check VM Power State
+        id: check
+        run: |
+          STATE=$(az vm get-instance-view \
+            --resource-group "${{ github.event.client_payload.resourceGroup }}" \
+            --name "${{ github.event.client_payload.vmName }}" \
+            --query "instanceView.statuses[?starts_with(code, 'PowerState/')].code" \
+            -o tsv)
+
+          echo "Current State = $STATE"
+
+          # save to output
+          echo "state=$STATE" >> $GITHUB_OUTPUT
+
+      - name: Stop VM if Running
+        if: contains(steps.check.outputs.state, 'PowerState/running')
+        run: |
+          echo "VM is running. Stopping now..."
+          az vm stop \
+            --resource-group "${{ github.event.client_payload.resourceGroup }}" \
+            --name "${{ github.event.client_payload.vmName }}"
+
+      - name: Skip Stop (Already Stopped)
+        if: "!contains(steps.check.outputs.state, 'PowerState/running')"
+        run: |
+          echo "VM is not running. No action taken."
