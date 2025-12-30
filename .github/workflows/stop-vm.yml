@@ -35,7 +35,7 @@ jobs:
             echo "ERROR: VM not found"
             exit 1
           fi
-          echo "✔ VM exists"
+          echo "VM exists"
 
       - name: Get VM Power State
         id: state
