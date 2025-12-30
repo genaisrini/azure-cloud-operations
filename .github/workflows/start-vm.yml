@@ -4,24 +4,41 @@ on:
   repository_dispatch:
     types: [start-vm]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   start:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
+      - name: Validate payload
+        run: |
+          if [ -z "${{ github.event.client_payload.resourceGroup }}" ] || [ -z "${{ github.event.client_payload.vmName }}" ]; then
+            echo "ERROR: resourceGroup and vmName are required"
+            exit 1
+          fi
+          echo "Payload validated"
+
       - name: Azure Login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          auth-type: SERVICE_PRINCIPAL
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Show Inputs
+      - name: Check VM existence
         run: |
-          echo "Resource Group: ${{ github.event.client_payload.resourceGroup }}"
-          echo "VM Name: ${{ github.event.client_payload.vmName }}"
+          if ! az vm show --resource-group "${{ github.event.client_payload.resourceGroup }}" --name "${{ github.event.client_payload.vmName }}" &>/dev/null; then
+            echo "ERROR: VM not found"
+            exit 1
+          fi
+          echo "VM exists"
 
-      - name: Check VM Power State
-        id: check
+      - name: Get VM Power State
+        id: state
         run: |
           STATE=$(az vm get-instance-view \
             --resource-group "${{ github.event.client_payload.resourceGroup }}" \
@@ -30,18 +47,19 @@ jobs:
             -o tsv)
 
           echo "Current State = $STATE"
-
           echo "state=$STATE" >> $GITHUB_OUTPUT
 
-      - name: Start VM if Stopped/Deallocated
-        if: contains(steps.check.outputs.state, 'PowerState/stopped') || contains(steps.check.outputs.state, 'PowerState/deallocated')
+      - name: Start VM
+        if: contains(steps.state.outputs.state, 'PowerState/stopped') || contains(steps.state.outputs.state, 'PowerState/deallocated')
         run: |
-          echo "VM is stopped. Starting now..."
+          echo "VM is stopped. Starting..."
           az vm start \
             --resource-group "${{ github.event.client_payload.resourceGroup }}" \
-            --name "${{ github.event.client_payload.vmName }}"
+            --name "${{ github.event.client_payload.vmName }}" \
+            --no-wait
+          echo "✔ Start command issued"
 
-      - name: Skip Start (Already Running or Starting)
-        if: "!contains(steps.check.outputs.state, 'PowerState/stopped') && !contains(steps.check.outputs.state, 'PowerState/deallocated')"
+      - name: Skip (Already running)
+        if: "!contains(steps.state.outputs.state, 'PowerState/stopped') && !contains(steps.state.outputs.state, 'PowerState/deallocated')"
         run: |
-          echo "VM is not in a stopped state. No action taken."
+          echo "VM already running — no action performed."
