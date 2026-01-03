@@ -1,0 +1,23 @@
+name: ServiceNow Demo Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      ritm:
+        description: "Requested Item number"
+        required: true
+        type: string
+      requested_for:
+        description: "Requested For user"
+        required: false
+        type: string
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show trigger details
+        run: |
+          echo "GitHub workflow triggered from ServiceNow 🎉"
+          echo "RITM Number: ${{ github.event.inputs.ritm }}"
+          echo "Requested For: ${{ github.event.inputs.requested_for }}"
